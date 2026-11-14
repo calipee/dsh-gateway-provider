@@ -80,6 +80,11 @@ accepts(
   (r) => `modelsUrl=${JSON.stringify(r.modelsUrl)}`,
 );
 accepts(
+  "model-info catalog mode and URL are accepted",
+  { catalogMode: "model-info", modelInfoURL: "http://gw.internal:4000/v1/model/info" },
+  (r) => `mode=${r.catalogMode} url=${r.modelInfoURL}`,
+);
+accepts(
   "numeric apiKeyEnv coerces to string",
   { apiKeyEnv: 12345 },
   (r) => `apiKeyEnv=${JSON.stringify(r.apiKeyEnv)}`,

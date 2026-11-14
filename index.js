@@ -132,8 +132,10 @@ const GatewaySchema = z.object({
   apiKeyEnv: coercedString().role("credential-ref"),
   /** Gateway type label (newapi/litellm/higress/openai-compatible/custom). */
   flavor: z.union(FLAVORS),
-  /** Model-list source: `auto` (prefer /v1/models), `v1`, or `management`. */
-  catalogMode: z.union(["auto", "v1", "management"]),
+  /** Model-list source: `auto` (prefer /v1/models), `v1`, `management`, or `model-info`. */
+  catalogMode: z.union(["auto", "v1", "management", "model-info"]),
+  /** Full URL of the gateway's model-info endpoint (LiteLLM `/model/info`). */
+  modelInfoURL: coercedString(),
   /** User id sent to the management API when it is used. */
   userId: coercedString(),
   /** Per-model overrides and custom models. */
@@ -162,14 +164,16 @@ export const Config = z.object({
   flavor: z.union(FLAVORS).default("newapi"),
   /** models.dev catalog URL (any fetch-able URL; file: works for offline mirrors). */
   modelsUrl: coercedString().default(DEFAULT_MODELS_URL),
+  /** Full URL of the gateway's model-info endpoint (LiteLLM `/model/info`). */
+  modelInfoURL: coercedString(),
   /** Enrich gateway models with models.dev parameters. */
   useModelsDev: z.boolean().default(true),
   /** Widen the unknown-model reasoning fallback to the full off~max set. */
   extendedReasoningLevels: z.boolean().default(false),
   /** Sort the picker newest-first by release date (unknown dates first). */
   sortModelsByRelease: z.boolean().default(true),
-  /** Model-list source: `auto` (prefer /v1/models), `v1`, or `management`. */
-  catalogMode: z.union(["auto", "v1", "management"]).default("auto"),
+  /** Model-list source: `auto` (prefer /v1/models), `v1`, `management`, or `model-info`. */
+  catalogMode: z.union(["auto", "v1", "management", "model-info"]).default("auto"),
   /** Model-list cache freshness window. */
   catalogTtlMs: z.number().step(1).min(1_000).default(DEFAULT_CATALOG_TTL_MS),
   /** Exclude non-chat model families from the picker. */
@@ -225,6 +229,7 @@ function gatewayConnection(gw, defaults, provider, label) {
     catalogBase: proto !== undefined ? (proto.catalogBase ?? (ownBase || null)) : baseURL,
     flavor,
     modelsUrl: defaults.modelsUrl,
+    modelInfoURL: gw.modelInfoURL ?? defaults.modelInfoURL,
     useModelsDev: defaults.useModelsDev,
     extendedReasoningLevels: defaults.extendedReasoningLevels,
     sortModelsByRelease: defaults.sortModelsByRelease,
@@ -276,6 +281,7 @@ export function resolveGateways(config, environment) {
     baseURL: baseURL.replace(/\/+$/, ""),
     flavor: config.flavor ?? "newapi",
     modelsUrl: config.modelsUrl ?? DEFAULT_MODELS_URL,
+    modelInfoURL: config.modelInfoURL,
     useModelsDev: config.useModelsDev ?? true,
     extendedReasoningLevels: config.extendedReasoningLevels ?? false,
     sortModelsByRelease: config.sortModelsByRelease ?? true,

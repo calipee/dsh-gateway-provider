@@ -57,6 +57,7 @@ function loadModule(language, snapshot, api) {
 
 const snapshot = {
 	label: "Main", flavor: "newapi", baseURL: "https://gw.example.com", apiKeyEnv: "MY_KEY",
+	catalogMode: "model-info", modelInfoURL: "https://gw.example.com/v1/model/info",
 	excludePatterns: ["(^|/|-)image"],
 	models: [
 		{ id: "gpt-5.2", _discoveredName: "GPT-5.2", _protocol: "openai", _discoveredContext: 400000, _discoveredMax: 128000, _reasoning: true, disabled: true },

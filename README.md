@@ -141,20 +141,33 @@ the first start where the plugin loads. The frequently used ones:
 | `gateways` | — | Array of extra gateways: `{ id, baseURL, apiKeyEnv, label, … }`, each becoming a `gateway:<id>` route. |
 | `models` | — | Per-model overrides: `{ id, name, disabled, protocol, contextWindow, maxTokens, reasoningLevels }`. |
 | `useModelsDev` / `modelsUrl` | `true` / models.dev | Parameter enrichment source (supports `file:` URLs for offline). |
+| `modelInfoURL` | — | Full LiteLLM `/model/info` URL for `catalogMode: "model-info"`. |
 | `excludePatterns` | image/speech/… | Regex list of model ids to keep out of the picker (matched case-insensitively). |
 | `sortModelsByRelease` | `true` | Newest models first. |
-| `catalogMode` | `auto` | `v1` (`/v1/models` only) / `management` (newapi user API) / `auto`. |
+| `catalogMode` | `auto` | `v1` (`/v1/models` only) / `management` (newapi user API) / `model-info` (LiteLLM `/model/info`) / `auto`. |
 | `endpointPriority` | responses → anthropic → openai → gemini | Which protocol to prefer when a model supports several. |
 | `openaiURL` / `responsesURL` / `anthropicURL` / `geminiURL` | — | Fully-custom gateways only: per-protocol endpoint URLs; unset = that protocol off. `geminiURL` may be a bare host, `…/v1beta`, or `…/v1beta/models` — the `/v1beta` segment is ensured (pi-ai expects it in the base). |
 | `maxTokens` / `defaultContextWindow` | `32768` / `128000` | Fallbacks when models.dev has no data. |
 | `streamIdleTimeoutMs` | `600000` | Idle timeout while streaming. |
 | `headers` | — | Extra HTTP headers sent to the gateway. |
 
+### LiteLLM model-info mode
+
+`catalogMode: "model-info"` reads the model list and per-model metadata from a
+LiteLLM `GET /model/info` endpoint instead of `/v1/models` + models.dev. Set
+`modelInfoURL` to the full URL (for example
+`http://agent-proxy.agent-proxy.svc.cluster.local:8080/v1/model/info`). The
+plugin maps `model_info.max_input_tokens` to the context window,
+`max_output_tokens` to the output cap, `supports_reasoning` to the reasoning
+flag, and `reasoning_effort_levels` to the selectable levels (`none` becomes
+`off`). Non-chat rows are filtered; models.dev still supplies names,
+descriptions and input modalities when `useModelsDev` is enabled.
+
 ## Troubleshooting
 
 | Symptom | Cause → fix |
 | --- | --- |
-| Picker route exists but zero models | The plugin can't read your model list. Check the gateway base URL; try `catalogMode: "management"` for newapi gateways that restrict `/v1/models`. |
+| Picker route exists but zero models | The plugin can't read your model list. Check the gateway base URL; try `catalogMode: "management"` for newapi gateways that restrict `/v1/models`. For `catalogMode: "model-info"`, check `modelInfoURL` and the key. |
 | `401` / auth errors on every request | Key missing or wrong: check the badge in Settings → Gateway Models, or `NEWAPI_API_KEY` in `~/.dsh/.credentials.yaml`. |
 | A model's context window looks wrong | models.dev had no match. Edit the model on the settings page (or a `models:` override). |
 | Wrong format answers / tool calls flaky for one model | That model is routed over a protocol it handles poorly. Pin `protocol` on the model (`openai`, `openai-response`, `anthropic`, `gemini`). |
@@ -166,18 +179,23 @@ the first start where the plugin loads. The frequently used ones:
 
 At startup the plugin registers one provider route per gateway, pulls the
 model list from the gateway, and fuzzy-matches each model id against
-models.dev to fill in real parameters. When you pick a model, dsh's request
-is translated to the pi-ai SDK's format and sent over that model's native
-protocol; the streamed reply is translated back into dsh chunks. Catalogs
-are cached (30 min by default) per gateway. No hand-written protocol code —
-the bridge is lifted from the official `dsh-llm-pi-ai` adapter.
+models.dev to fill in real parameters. With `catalogMode: "model-info"` the
+list and per-model metadata come from a LiteLLM `/model/info` endpoint
+instead; models.dev is then only a naming fallback. When you pick a model,
+dsh's request is translated to the pi-ai SDK's format and sent over that
+model's native protocol; the streamed reply is translated back into dsh
+chunks. Catalogs are cached (30 min by default) per gateway. No hand-written
+protocol code — the bridge is lifted from the official `dsh-llm-pi-ai`
+adapter.
 
 ## Development
 
 ```sh
 git clone https://github.com/Luck9Star/dsh-gateway-provider
 cd dsh-gateway-provider
-pnpm install               # pi-ai (pinned) + @deepseek-ai/* profile symlinks, via the prepare hook
+pnpm install               # pi-ai (pinned); the package has no prepare hook
+npm run link               # optional: symlink @deepseek-ai/* from a harness profile
+npm test                   # offline suite
 pnpm run test:client       # settings-UI render, both locales
 pnpm run test:urls         # URL/derivation units
 pnpm run test:provider-cache  # protocol edit rebuilds the cached pi-ai provider

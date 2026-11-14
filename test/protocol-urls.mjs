@@ -7,7 +7,7 @@
 import { deriveProtocolURLs, effectiveEndpointTypes, DEFAULT_ENDPOINT_PRIORITY } from "../lib/protocols.js";
 import { sdkBaseURL, buildModel } from "../lib/pi-provider.js";
 import { resolveGateways } from "../index.js";
-import { discoverGatewayModels } from "../lib/catalog.js";
+import { discoverGatewayModels, getCatalog } from "../lib/catalog.js";
 import http from "node:http";
 
 let failed = false;
@@ -197,11 +197,20 @@ check("plain config still falls back to the public cloud",
 // server recording the exact request path per base form.
 {
 	const hits = [];
-	// The management API answers a flat id list; /v1/models answers objects.
+	// The management API answers a flat id list; /v1/models answers objects;
+	// /model/info answers LiteLLM's per-model metadata rows.
 	let flatMode = false;
+	let modelInfoMode = false;
 	const server = http.createServer((req, res) => {
 		hits.push(req.url);
 		res.setHeader("content-type", "application/json");
+		if (modelInfoMode) {
+			res.end(JSON.stringify({ data: [
+				{ model_name: "probe-model", model_info: { mode: "chat", supports_reasoning: true, reasoning_effort_levels: ["none", "high"], max_input_tokens: 1000, max_output_tokens: 100 } },
+				{ model_name: "probe-embed", model_info: { mode: "embedding", supports_reasoning: null } },
+			] }));
+			return;
+		}
 		res.end(JSON.stringify({ data: flatMode ? ["probe-model"] : [{ id: "probe-model" }] }));
 	});
 	await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -226,6 +235,24 @@ check("plain config still falls back to the public cloud",
 		await probe({ baseURL: `http://127.0.0.1:${port}/v1beta/` }, "trailing slash + v1beta tolerated (issue #4)", "/v1/models");
 		await probe({ baseURL: `http://127.0.0.1:${port}/v2beta` }, "v2beta stripped too (issue #4)", "/v1/models");
 		await probe({ baseURL: `http://127.0.0.1:${port}/v1beta`, catalogMode: "management" }, "management mode with v1beta base hits /api/user/models (issue #4)", "/api/user/models");
+		const probeModelInfo = async (config, label, expectedPath) => {
+			hits.length = 0;
+			modelInfoMode = true;
+			const gw = byRoute(config, "newapi");
+			const models = await discoverGatewayModels(gw.connection, "test-key");
+			const got = `${hits[0] ?? "(no request)"} → ${models.length} model(s)`;
+			check(label, got, `${expectedPath} → 1 model(s)`);
+			const entries = await getCatalog(gw.connection, "test-key");
+			check("model-info maps none to off and keeps levels", JSON.stringify(entries[0]?.reasoningLevels), JSON.stringify(["off", "high"]));
+			check("model-info filters non-chat rows", entries.length, 1);
+			modelInfoMode = false;
+		};
+		await probeModelInfo({
+			baseURL: `http://127.0.0.1:${port}/modelinfo`,
+			catalogMode: "model-info",
+			modelInfoURL: `http://127.0.0.1:${port}/v1/model/info`,
+			useModelsDev: false,
+		}, "model-info mode hits modelInfoURL", "/v1/model/info");
 	} finally {
 		server.close();
 	}

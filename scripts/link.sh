@@ -59,4 +59,4 @@ for PKG in "${PACKAGES[@]}"; do
 done
 
 echo "node_modules ready: @deepseek-ai/* linked to profile, pi-ai pinned locally"
-echo "note: node_modules is gitignored; 'pnpm install' re-creates everything (prepare runs this script)."
+echo "note: node_modules is gitignored; run 'npm run link' after 'pnpm install --ignore-scripts'."
